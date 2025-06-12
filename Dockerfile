@@ -1,34 +1,28 @@
-# ======================
-# FRONTEND BUILD STAGE
-# ======================
-FROM node:20 AS frontend-build
-
-WORKDIR /app/client
-COPY client/package*.json ./
-RUN npm install
-COPY client/ ./
-RUN npm run build
-
-# ======================
-# BACKEND BUILD STAGE
-# ======================
-FROM node:20 AS backend
+# Use official Node.js image for build stage
+FROM node:18-alpine AS build
 
 WORKDIR /app
-COPY server/package*.json ./server/
-RUN cd server && npm install
 
-# Copy backend source
-COPY server/ ./server/
+# Copy package files and install dependencies
+COPY package*.json ./
+RUN npm ci
 
-# Copy frontend build into backend (assumes backend serves static files)
-COPY --from=frontend-build /app/client/build ./server/public
+# Copy rest of the app and build
+COPY . .
+RUN npm run build
 
-# Set working directory to backend
-WORKDIR /app/server
+# Production stage: serve with Nginx
+FROM nginx:stable-alpine
 
-# Expose backend port (adjust if needed)
-EXPOSE 5000
+# Remove default site
+RUN rm -rf /usr/share/nginx/html/*
 
-CMD ["npm", "start"]
+# Copy build from previous stage
+COPY --from=build /app/build /usr/share/nginx/html
 
+# Copy optional custom Nginx config (if exists)
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expose port and start Nginx
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
